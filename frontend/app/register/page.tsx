@@ -20,8 +20,9 @@ export default function RegisterPage() {
       await register(email, username, password)
       router.push('/chat')
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } }
-      setError(e.response?.data?.message || 'Registration failed')
+      const e = err as { response?: { data?: { message?: string | string[] } } }
+      const msg = e.response?.data?.message
+      setError(Array.isArray(msg) ? msg.join(', ') : msg || 'Registration failed — is the backend running?')
     }
   }
 

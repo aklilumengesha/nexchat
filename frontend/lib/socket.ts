@@ -8,7 +8,7 @@ export function getSocket(): Socket {
       ? localStorage.getItem('nexchat_token')
       : null
 
-    socket = io(process.env.NEXT_PUBLIC_WS_URL!, {
+    socket = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001', {
       auth: { token },
       autoConnect: false,
     })
