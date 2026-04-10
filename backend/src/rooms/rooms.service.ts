@@ -78,6 +78,9 @@ export class RoomsService {
         reactions: {
           select: { emoji: true, userId: true },
         },
+        replyTo: {
+          include: { user: { select: { id: true, username: true } } },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take,

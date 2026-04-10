@@ -45,6 +45,7 @@ export default function ChatWindow() {
   const [hoveredMsg, setHoveredMsg] = useState<string | null>(null)
   const [reactionPicker, setReactionPicker] = useState<string | null>(null)
   const [msgReactions, setMsgReactions] = useState<Record<string, { emoji: string; count: number }[]>>({})
+  const [replyTo, setReplyTo] = useState<Message | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -96,8 +97,13 @@ export default function ChatWindow() {
   const sendMessage = () => {
     if (!input.trim() || !activeRoom) return
     const socket = connectSocket()
-    socket.emit('message:send', { roomId: activeRoom.id, content: input.trim() })
+    socket.emit('message:send', {
+      roomId: activeRoom.id,
+      content: input.trim(),
+      replyToId: replyTo?.id || undefined,
+    })
     setInput('')
+    setReplyTo(null)
     socket.emit('typing:stop', { roomId: activeRoom.id })
   }
 
@@ -217,12 +223,23 @@ export default function ChatWindow() {
                   <div className="relative">
                     {/* Reaction trigger */}
                     {hoveredMsg === msg.id && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setReactionPicker(reactionPicker === msg.id ? null : msg.id) }}
-                        className={`absolute top-1/2 -translate-y-1/2 ${isOwn ? '-left-8' : '-right-8'} w-6 h-6 rounded-full bg-[#2d2d2d] border border-white/10 flex items-center justify-center text-xs hover:bg-[#3d3d3d] transition-colors z-10`}
-                      >
-                        😊
-                      </button>
+                      <div className={`absolute top-1/2 -translate-y-1/2 ${isOwn ? '-left-16' : '-right-16'} flex gap-1 z-10`}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setReplyTo(msg); setReactionPicker(null) }}
+                          className="w-6 h-6 rounded-full bg-[#2d2d2d] border border-white/10 flex items-center justify-center hover:bg-[#3d3d3d] transition-colors"
+                          title="Reply"
+                        >
+                          <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setReactionPicker(reactionPicker === msg.id ? null : msg.id) }}
+                          className="w-6 h-6 rounded-full bg-[#2d2d2d] border border-white/10 flex items-center justify-center text-xs hover:bg-[#3d3d3d] transition-colors"
+                        >
+                          😊
+                        </button>
+                      </div>
                     )}
 
                     {/* Emoji picker */}
@@ -245,6 +262,17 @@ export default function ChatWindow() {
                         ? `bg-violet-600 text-white ${isFirstInGroup ? 'rounded-t-2xl' : 'rounded-2xl'} ${isLastInGroup ? 'rounded-bl-2xl rounded-br-sm' : 'rounded-2xl'}`
                         : `bg-[#2d2d2d] text-gray-100 ${isFirstInGroup ? 'rounded-t-2xl' : 'rounded-2xl'} ${isLastInGroup ? 'rounded-br-2xl rounded-bl-sm' : 'rounded-2xl'}`
                     }`}>
+                      {/* Reply quote */}
+                      {msg.replyTo && (
+                        <div className={`mb-2 pl-2 border-l-2 ${isOwn ? 'border-violet-300' : 'border-violet-500'} rounded-sm`}>
+                          <p className={`text-[11px] font-semibold ${isOwn ? 'text-violet-200' : 'text-violet-400'}`}>
+                            {msg.replyTo.user.username}
+                          </p>
+                          <p className={`text-[11px] truncate ${isOwn ? 'text-violet-200' : 'text-gray-400'}`}>
+                            {msg.replyTo.content}
+                          </p>
+                        </div>
+                      )}
                       {msg.content}
                       <span className={`text-[10px] ml-2 float-right mt-1 ${isOwn ? 'text-violet-200' : 'text-gray-500'}`}>
                         {formatTime(msg.createdAt)}
@@ -291,6 +319,21 @@ export default function ChatWindow() {
 
       {/* Input */}
       <div className="px-4 py-3 bg-[#212121] border-t border-white/5">
+        {/* Reply preview */}
+        {replyTo && (
+          <div className="flex items-center gap-2 mb-2 bg-[#2d2d2d] rounded-xl px-3 py-2">
+            <div className="w-0.5 h-8 bg-violet-500 rounded-full shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-violet-400">{replyTo.user.username}</p>
+              <p className="text-xs text-gray-400 truncate">{replyTo.content}</p>
+            </div>
+            <button onClick={() => setReplyTo(null)} className="text-gray-500 hover:text-gray-300 shrink-0">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-3">
           <button className="text-gray-500 hover:text-gray-300 transition-colors shrink-0">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

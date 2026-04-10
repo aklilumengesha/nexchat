@@ -17,6 +17,8 @@ export interface Message {
   userId: string
   content: string
   createdAt: string
+  replyToId?: string
+  replyTo?: { id: string; content: string; user: { id: string; username: string } } | null
   user: { id: string; username: string; avatar?: string }
   reactions?: { emoji: string; userId: string }[]
 }

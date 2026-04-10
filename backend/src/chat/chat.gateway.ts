@@ -112,12 +112,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('message:send')
   async handleMessage(
-    @MessageBody() data: { roomId: string; content: string },
+    @MessageBody() data: { roomId: string; content: string; replyToId?: string },
     @ConnectedSocket() client: AuthSocket,
   ) {
     if (!client.userId || !data.content?.trim()) return
 
-    // Verify membership
     const member = await this.prisma.roomMember.findUnique({
       where: { roomId_userId: { roomId: data.roomId, userId: client.userId } },
     })
@@ -126,19 +125,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return
     }
 
-    // Save to DB
     const message = await this.prisma.message.create({
       data: {
         roomId: data.roomId,
         userId: client.userId,
         content: data.content.trim(),
+        replyToId: data.replyToId || null,
       },
       include: {
         user: { select: { id: true, username: true, avatar: true } },
+        replyTo: {
+          include: { user: { select: { id: true, username: true } } },
+        },
       },
     })
 
-    // Broadcast to everyone in the room
     this.server.to(data.roomId).emit('message:new', message)
   }
 

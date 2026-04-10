@@ -52,15 +52,18 @@ model RoomMember {
 }
 
 model Message {
-  id        String   @id @default(uuid())
-  roomId    String   @map("room_id")
-  userId    String   @map("user_id")
-  content   String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  roomId      String   @map("room_id")
+  userId      String   @map("user_id")
+  content     String
+  replyToId   String?  @map("reply_to_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   room      Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replyTo   Message?   @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]  @relation("MessageReplies")
   reactions Reaction[]
 
   @@map("messages")
