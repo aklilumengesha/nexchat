@@ -6,11 +6,10 @@ import { useAuthStore } from '@/store/auth.store'
 import { connectSocket } from '@/lib/socket'
 import api from '@/lib/api'
 
+const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+
 function RoomAvatar({ name }: { name: string }) {
-  const colors = [
-    'bg-blue-500', 'bg-violet-500', 'bg-emerald-500',
-    'bg-rose-500', 'bg-amber-500', 'bg-cyan-500', 'bg-pink-500',
-  ]
+  const colors = ['bg-blue-500','bg-violet-500','bg-emerald-500','bg-rose-500','bg-amber-500','bg-cyan-500','bg-pink-500']
   const color = colors[name.charCodeAt(0) % colors.length]
   return (
     <div className={`w-9 h-9 ${color} rounded-full flex items-center justify-center font-semibold text-white text-sm shrink-0`}>
@@ -43,6 +42,9 @@ export default function ChatWindow() {
   const [input, setInput] = useState('')
   const [memberCount, setMemberCount] = useState<number | null>(null)
   const [showMenu, setShowMenu] = useState(false)
+  const [hoveredMsg, setHoveredMsg] = useState<string | null>(null)
+  const [reactionPicker, setReactionPicker] = useState<string | null>(null)
+  const [msgReactions, setMsgReactions] = useState<Record<string, { emoji: string; count: number }[]>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -50,11 +52,8 @@ export default function ChatWindow() {
   useEffect(() => {
     if (!activeRoom) return
     const socket = connectSocket()
-
     fetchMessages(activeRoom.id)
     socket.emit('room:join', { roomId: activeRoom.id })
-
-    // Fetch member count
     api.get(`/rooms/${activeRoom.id}`).then((res) => {
       setMemberCount(res.data.members?.length ?? null)
     }).catch(() => {})
@@ -62,13 +61,12 @@ export default function ChatWindow() {
     socket.on('message:new', (msg: Message) => {
       if (msg.roomId === activeRoom.id) addMessage(msg)
     })
-
-    socket.on('typing:start', ({ roomId, username }: { roomId: string; username: string }) => {
-      if (roomId === activeRoom.id && username !== user?.username) {
-        setTyping(roomId, username, true)
-      }
+    socket.on('reaction:updated', ({ messageId, reactions }: { messageId: string; reactions: { emoji: string; count: number }[] }) => {
+      setMsgReactions((prev) => ({ ...prev, [messageId]: reactions }))
     })
-
+    socket.on('typing:start', ({ roomId, username }: { roomId: string; username: string }) => {
+      if (roomId === activeRoom.id && username !== user?.username) setTyping(roomId, username, true)
+    })
     socket.on('typing:stop', ({ roomId, username }: { roomId: string; username: string }) => {
       setTyping(roomId, username, false)
     })
@@ -76,6 +74,7 @@ export default function ChatWindow() {
     return () => {
       socket.emit('room:leave', { roomId: activeRoom.id })
       socket.off('message:new')
+      socket.off('reaction:updated')
       socket.off('typing:start')
       socket.off('typing:stop')
     }
@@ -85,12 +84,10 @@ export default function ChatWindow() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Close menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false)
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
+      setReactionPicker(null)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -105,10 +102,7 @@ export default function ChatWindow() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,9 +111,15 @@ export default function ChatWindow() {
     const socket = connectSocket()
     socket.emit('typing:start', { roomId: activeRoom.id })
     if (typingTimeout.current) clearTimeout(typingTimeout.current)
-    typingTimeout.current = setTimeout(() => {
-      socket.emit('typing:stop', { roomId: activeRoom.id })
-    }, 2000)
+    typingTimeout.current = setTimeout(() => socket.emit('typing:stop', { roomId: activeRoom.id }), 2000)
+  }
+
+  const toggleReaction = (messageId: string, emoji: string) => {
+    if (!activeRoom) return
+    const socket = connectSocket()
+    const existing = msgReactions[messageId]?.find((r) => r.emoji === emoji)
+    socket.emit(existing ? 'reaction:remove' : 'reaction:add', { messageId, emoji, roomId: activeRoom.id })
+    setReactionPicker(null)
   }
 
   const typing = activeRoom ? (typingUsers[activeRoom.id] || []) : []
@@ -140,8 +140,7 @@ export default function ChatWindow() {
 
   return (
     <div className="flex-1 flex flex-col bg-[#1a1a1a] h-full">
-
-      {/* ── Chat Header ── */}
+      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-[#212121] border-b border-white/5">
         <div className="flex items-center gap-3">
           <RoomAvatar name={activeRoom.name} />
@@ -152,42 +151,29 @@ export default function ChatWindow() {
             </p>
           </div>
         </div>
-
-        {/* Header actions */}
         <div className="flex items-center gap-1 relative" ref={menuRef}>
           <button className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </button>
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
-          >
+          <button onClick={() => setShowMenu(!showMenu)} className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
             </svg>
           </button>
-
-          {/* Dropdown menu */}
           {showMenu && (
             <div className="absolute right-0 top-10 w-44 bg-[#2d2d2d] rounded-xl shadow-2xl border border-white/10 overflow-hidden z-50">
-              <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors">
-                Room Info
-              </button>
-              <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors">
-                Members
-              </button>
+              <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors">Room Info</button>
+              <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors">Members</button>
               <div className="border-t border-white/10" />
-              <button className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/10 transition-colors">
-                Leave Room
-              </button>
+              <button className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/10 transition-colors">Leave Room</button>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Messages ── */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1">
         {messages.map((msg, i) => {
           const isOwn = msg.user.id === user?.id
@@ -195,11 +181,11 @@ export default function ChatWindow() {
           const nextMsg = messages[i + 1]
           const showDateSep = !prevMsg || !isSameDay(prevMsg.createdAt, msg.createdAt)
           const isFirstInGroup = !prevMsg || prevMsg.user.id !== msg.user.id || showDateSep
-          const isLastInGroup = !nextMsg || nextMsg.user.id !== msg.user.id || !isSameDay(msg.createdAt, nextMsg.createdAt)
+          const isLastInGroup = !nextMsg || nextMsg.user.id !== msg.user.id || !isSameDay(msg.createdAt, nextMsg?.createdAt)
+          const reactions = msgReactions[msg.id] || []
 
           return (
             <div key={msg.id}>
-              {/* Date separator */}
               {showDateSep && (
                 <div className="flex items-center justify-center my-4">
                   <span className="bg-[#2d2d2d] text-gray-400 text-xs px-3 py-1 rounded-full">
@@ -208,40 +194,79 @@ export default function ChatWindow() {
                 </div>
               )}
 
-              <div className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${isFirstInGroup ? 'mt-3' : 'mt-0.5'}`}>
-                {/* Avatar — only for others, only on last in group */}
+              <div
+                className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${isFirstInGroup ? 'mt-3' : 'mt-0.5'} relative`}
+                onMouseEnter={() => setHoveredMsg(msg.id)}
+                onMouseLeave={() => setHoveredMsg(null)}
+              >
                 {!isOwn && (
                   <div className="w-7 shrink-0">
-                    {isLastInGroup ? (
+                    {isLastInGroup && (
                       <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-semibold">
                         {msg.user.username[0].toUpperCase()}
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 )}
 
                 <div className={`flex flex-col max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
-                  {/* Sender name — only for others, only first in group */}
                   {!isOwn && isFirstInGroup && (
-                    <span className="text-xs font-medium text-violet-400 mb-1 ml-3">
-                      {msg.user.username}
-                    </span>
+                    <span className="text-xs font-medium text-violet-400 mb-1 ml-3">{msg.user.username}</span>
                   )}
 
-                  {/* Bubble */}
-                  <div className={`relative px-3 py-2 text-sm leading-relaxed ${
-                    isOwn
-                      ? `bg-violet-600 text-white ${isFirstInGroup ? 'rounded-t-2xl' : 'rounded-2xl'} ${isLastInGroup ? 'rounded-bl-2xl rounded-br-sm' : 'rounded-2xl'}`
-                      : `bg-[#2d2d2d] text-gray-100 ${isFirstInGroup ? 'rounded-t-2xl' : 'rounded-2xl'} ${isLastInGroup ? 'rounded-br-2xl rounded-bl-sm' : 'rounded-2xl'}`
-                  }`}>
-                    {msg.content}
-                    {/* Time inside bubble */}
-                    <span className={`text-[10px] ml-2 float-right mt-1 ${isOwn ? 'text-violet-200' : 'text-gray-500'}`}>
-                      {formatTime(msg.createdAt)}
-                      {isOwn && (
-                        <span className="ml-1">✓✓</span>
-                      )}
-                    </span>
+                  <div className="relative">
+                    {/* Reaction trigger */}
+                    {hoveredMsg === msg.id && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setReactionPicker(reactionPicker === msg.id ? null : msg.id) }}
+                        className={`absolute top-1/2 -translate-y-1/2 ${isOwn ? '-left-8' : '-right-8'} w-6 h-6 rounded-full bg-[#2d2d2d] border border-white/10 flex items-center justify-center text-xs hover:bg-[#3d3d3d] transition-colors z-10`}
+                      >
+                        😊
+                      </button>
+                    )}
+
+                    {/* Emoji picker */}
+                    {reactionPicker === msg.id && (
+                      <div
+                        className={`absolute ${isOwn ? 'right-0' : 'left-0'} -top-12 bg-[#2d2d2d] border border-white/10 rounded-2xl px-2 py-1.5 flex gap-1 z-20 shadow-xl`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {EMOJIS.map((emoji) => (
+                          <button key={emoji} onClick={() => toggleReaction(msg.id, emoji)} className="text-lg hover:scale-125 transition-transform">
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Bubble */}
+                    <div className={`px-3 py-2 text-sm leading-relaxed ${
+                      isOwn
+                        ? `bg-violet-600 text-white ${isFirstInGroup ? 'rounded-t-2xl' : 'rounded-2xl'} ${isLastInGroup ? 'rounded-bl-2xl rounded-br-sm' : 'rounded-2xl'}`
+                        : `bg-[#2d2d2d] text-gray-100 ${isFirstInGroup ? 'rounded-t-2xl' : 'rounded-2xl'} ${isLastInGroup ? 'rounded-br-2xl rounded-bl-sm' : 'rounded-2xl'}`
+                    }`}>
+                      {msg.content}
+                      <span className={`text-[10px] ml-2 float-right mt-1 ${isOwn ? 'text-violet-200' : 'text-gray-500'}`}>
+                        {formatTime(msg.createdAt)}
+                        {isOwn && <span className="ml-1">✓✓</span>}
+                      </span>
+                    </div>
+
+                    {/* Reactions */}
+                    {reactions.length > 0 && (
+                      <div className={`flex flex-wrap gap-1 mt-1 ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                        {reactions.map((r) => (
+                          <button
+                            key={r.emoji}
+                            onClick={() => toggleReaction(msg.id, r.emoji)}
+                            className="flex items-center gap-1 bg-[#2d2d2d] border border-white/10 rounded-full px-2 py-0.5 text-xs hover:bg-[#3d3d3d] transition-colors"
+                          >
+                            <span>{r.emoji}</span>
+                            <span className="text-gray-400">{r.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -249,38 +274,29 @@ export default function ChatWindow() {
           )
         })}
 
-        {/* Typing indicator */}
         {typing.length > 0 && (
           <div className="flex items-end gap-2 mt-2">
             <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-white text-xs shrink-0">
               {typing[0][0].toUpperCase()}
             </div>
             <div className="bg-[#2d2d2d] rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: `${i * 0.15}s` }}
-                />
+              {[0,1,2].map((i) => (
+                <span key={i} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
               ))}
             </div>
           </div>
         )}
-
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Input bar ── */}
+      {/* Input */}
       <div className="px-4 py-3 bg-[#212121] border-t border-white/5">
         <div className="flex items-center gap-3">
-          {/* Emoji button */}
           <button className="text-gray-500 hover:text-gray-300 transition-colors shrink-0">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
-
-          {/* Input */}
           <div className="flex-1 bg-[#2d2d2d] rounded-full px-4 py-2.5">
             <input
               value={input}
@@ -290,14 +306,10 @@ export default function ChatWindow() {
               className="w-full bg-transparent text-white text-sm placeholder-gray-500 focus:outline-none"
             />
           </div>
-
-          {/* Send / mic button */}
           <button
             onClick={sendMessage}
             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
-              input.trim()
-                ? 'bg-violet-600 hover:bg-violet-700 text-white'
-                : 'bg-[#2d2d2d] text-gray-500'
+              input.trim() ? 'bg-violet-600 hover:bg-violet-700 text-white' : 'bg-[#2d2d2d] text-gray-500'
             }`}
           >
             {input.trim() ? (

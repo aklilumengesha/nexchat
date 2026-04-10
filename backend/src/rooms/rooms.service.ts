@@ -75,6 +75,9 @@ export class RoomsService {
       where: { roomId },
       include: {
         user: { select: { id: true, username: true, avatar: true } },
+        reactions: {
+          select: { emoji: true, userId: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take,

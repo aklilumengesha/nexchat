@@ -165,6 +165,52 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     })
   }
 
+  @SubscribeMessage('reaction:add')
+  async handleReactionAdd(
+    @MessageBody() data: { messageId: string; emoji: string; roomId: string },
+    @ConnectedSocket() client: AuthSocket,
+  ) {
+    if (!client.userId) return
+    try {
+      const reaction = await this.prisma.reaction.upsert({
+        where: { messageId_userId_emoji: { messageId: data.messageId, userId: client.userId, emoji: data.emoji } },
+        create: { messageId: data.messageId, userId: client.userId, emoji: data.emoji },
+        update: {},
+      })
+      const counts = await this.prisma.reaction.groupBy({
+        by: ['emoji'],
+        where: { messageId: data.messageId },
+        _count: { emoji: true },
+      })
+      this.server.to(data.roomId).emit('reaction:updated', {
+        messageId: data.messageId,
+        reactions: counts.map((r) => ({ emoji: r.emoji, count: r._count.emoji })),
+      })
+    } catch { /* duplicate — ignore */ }
+  }
+
+  @SubscribeMessage('reaction:remove')
+  async handleReactionRemove(
+    @MessageBody() data: { messageId: string; emoji: string; roomId: string },
+    @ConnectedSocket() client: AuthSocket,
+  ) {
+    if (!client.userId) return
+    try {
+      await this.prisma.reaction.delete({
+        where: { messageId_userId_emoji: { messageId: data.messageId, userId: client.userId, emoji: data.emoji } },
+      })
+      const counts = await this.prisma.reaction.groupBy({
+        by: ['emoji'],
+        where: { messageId: data.messageId },
+        _count: { emoji: true },
+      })
+      this.server.to(data.roomId).emit('reaction:updated', {
+        messageId: data.messageId,
+        reactions: counts.map((r) => ({ emoji: r.emoji, count: r._count.emoji })),
+      })
+    } catch { /* not found — ignore */ }
+  }
+
   getOnlineUsers() {
     return Array.from(this.onlineUsers.keys())
   }

@@ -18,6 +18,7 @@ export interface Message {
   content: string
   createdAt: string
   user: { id: string; username: string; avatar?: string }
+  reactions?: { emoji: string; userId: string }[]
 }
 
 interface RoomsState {
@@ -56,9 +57,7 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
   },
 
   addMessage: (msg) =>
-    set((state) => ({ messages: [...state.messages, msg] })),
-
-  createRoom: async (name, description) => {
+    set((state) => ({ messages: [...state.messages, msg] })),  createRoom: async (name, description) => {
     const { data } = await api.post('/rooms', { name, description })
     set((state) => ({ rooms: [data, ...state.rooms] }))
     return data
