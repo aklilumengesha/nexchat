@@ -7,6 +7,7 @@ import { connectSocket } from '@/lib/socket'
 import api from '@/lib/api'
 import { usePresenceStore } from '@/store/presence.store'
 import SearchPanel from '@/components/SearchPanel'
+import RoomInfoPanel from '@/components/RoomInfoPanel'
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 
@@ -49,6 +50,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const [memberCount, setMemberCount] = useState<number | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [showRoomInfo, setShowRoomInfo] = useState(false)
   const [hoveredMsg, setHoveredMsg] = useState<string | null>(null)
   const [reactionPicker, setReactionPicker] = useState<string | null>(null)
   const [msgReactions, setMsgReactions] = useState<Record<string, { emoji: string; count: number }[]>>({})
@@ -237,10 +239,25 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
           </button>
           {showMenu && (
             <div className="absolute right-0 top-10 w-44 bg-[#2d2d2d] rounded-xl shadow-2xl border border-white/10 overflow-hidden z-50">
-              <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors">Room Info</button>
-              <button className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors">Members</button>
+              <button
+                onClick={() => { setShowRoomInfo(true); setShowMenu(false) }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors"
+              >
+                Room Info
+              </button>
+              <button
+                onClick={() => { setShowRoomInfo(true); setShowMenu(false) }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors"
+              >
+                Members
+              </button>
               <div className="border-t border-white/10" />
-              <button className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/10 transition-colors">Leave Room</button>
+              <button
+                onClick={() => { setShowRoomInfo(true); setShowMenu(false) }}
+                className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/10 transition-colors"
+              >
+                Leave Room
+              </button>
             </div>
           )}
         </div>
@@ -499,6 +516,20 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
           roomId={activeRoom.id}
           onClose={() => setShowSearch(false)}
           onJumpTo={jumpToMessage}
+        />
+      )}
+
+      {/* Room info panel */}
+      {showRoomInfo && activeRoom && !activeRoom.isDm && (
+        <RoomInfoPanel
+          roomId={activeRoom.id}
+          roomName={activeRoom.name}
+          roomDescription={activeRoom.description}
+          createdBy={activeRoom.createdBy}
+          onClose={() => setShowRoomInfo(false)}
+          onLeave={() => {
+            useRoomsStore.getState().fetchRooms()
+          }}
         />
       )}
     </div>
