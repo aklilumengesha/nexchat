@@ -25,6 +25,7 @@ function RoomAvatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' })
 export default function Sidebar({ onRoomSelect }: Props) {
   const { rooms, activeRoom, createRoom } = useRoomsStore()
   const { user, logout } = useAuthStore()
+  const unreadCounts = useRoomsStore((s) => s.unreadCounts)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
@@ -132,12 +133,16 @@ export default function Sidebar({ onRoomSelect }: Props) {
               <RoomAvatar name={room.name} />
               <div className="flex-1 min-w-0 text-left">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-white truncate">{room.name}</span>
-                  {room._count && (
-                    <span className="text-[11px] text-gray-500 shrink-0 ml-2">
-                      {room._count.members} members
+                  <span className={`text-sm truncate ${unreadCounts[room.id] > 0 && !isActive ? 'font-semibold text-white' : 'font-medium text-white'}`}>{room.name}</span>
+                  {unreadCounts[room.id] > 0 && !isActive ? (
+                    <span className="ml-2 min-w-[20px] h-5 bg-violet-600 rounded-full text-[11px] text-white font-semibold flex items-center justify-center px-1.5 shrink-0">
+                      {unreadCounts[room.id] > 99 ? '99+' : unreadCounts[room.id]}
                     </span>
-                  )}
+                  ) : room._count ? (
+                    <span className="text-[11px] text-gray-500 shrink-0 ml-2">
+                      {room._count.members}
+                    </span>
+                  ) : null}
                 </div>
                 <p className="text-xs text-gray-500 truncate mt-0.5">
                   {room.description || `# ${room.name}`}

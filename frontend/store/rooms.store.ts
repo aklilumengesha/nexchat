@@ -29,6 +29,7 @@ interface RoomsState {
   activeRoom: Room | null
   messages: Message[]
   typingUsers: Record<string, string[]>
+  unreadCounts: Record<string, number>
   loading: boolean
   fetchRooms: () => Promise<void>
   setActiveRoom: (room: Room) => void
@@ -39,6 +40,8 @@ interface RoomsState {
   createRoom: (name: string, description?: string) => Promise<Room>
   joinRoom: (roomId: string) => Promise<void>
   setTyping: (roomId: string, username: string, isTyping: boolean) => void
+  incrementUnread: (roomId: string) => void
+  clearUnread: (roomId: string) => void
 }
 
 export const useRoomsStore = create<RoomsState>((set, get) => ({
@@ -46,6 +49,7 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
   activeRoom: null,
   messages: [],
   typingUsers: {},
+  unreadCounts: {},
   loading: false,
 
   fetchRooms: async () => {
@@ -54,8 +58,11 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
     set({ rooms: data, loading: false })
   },
 
-  setActiveRoom: (room) => set({ activeRoom: room, messages: [] }),
-
+  setActiveRoom: (room) => set((state) => ({
+    activeRoom: room,
+    messages: [],
+    unreadCounts: { ...state.unreadCounts, [room.id]: 0 },
+  })),
   fetchMessages: async (roomId) => {
     const { data } = await api.get(`/rooms/${roomId}/messages`)
     set({ messages: [...data].reverse() })
@@ -91,4 +98,17 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
         : current.filter((u) => u !== username)
       return { typingUsers: { ...state.typingUsers, [roomId]: updated } }
     }),
+
+  incrementUnread: (roomId) =>
+    set((state) => ({
+      unreadCounts: {
+        ...state.unreadCounts,
+        [roomId]: (state.unreadCounts[roomId] || 0) + 1,
+      },
+    })),
+
+  clearUnread: (roomId) =>
+    set((state) => ({
+      unreadCounts: { ...state.unreadCounts, [roomId]: 0 },
+    })),
 }))

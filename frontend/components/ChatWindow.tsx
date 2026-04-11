@@ -37,7 +37,7 @@ function isSameDay(a: string, b: string) {
 }
 
 export default function ChatWindow({ onBack }: { onBack?: () => void }) {
-  const { activeRoom, messages, fetchMessages, addMessage, updateMessage, deleteMessage, setTyping, typingUsers } = useRoomsStore()
+  const { activeRoom, messages, fetchMessages, addMessage, updateMessage, deleteMessage, setTyping, typingUsers, incrementUnread } = useRoomsStore()
   const { user } = useAuthStore()
   const [input, setInput] = useState('')
   const [memberCount, setMemberCount] = useState<number | null>(null)
@@ -63,7 +63,16 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
     }).catch(() => {})
 
     socket.on('message:new', (msg: Message) => {
-      if (msg.roomId === activeRoom.id) addMessage(msg)
+      if (msg.roomId === activeRoom.id) {
+        addMessage(msg)
+      } else {
+        incrementUnread(msg.roomId)
+        // Update browser tab title
+        if (typeof document !== 'undefined') {
+          document.title = `(${msg.user.username}) NexChat`
+          setTimeout(() => { document.title = 'NexChat — Real-time Chat' }, 3000)
+        }
+      }
     })
     socket.on('message:edited', (msg: Message) => {
       updateMessage(msg)
