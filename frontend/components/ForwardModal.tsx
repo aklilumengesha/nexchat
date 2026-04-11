@@ -1,9 +1,14 @@
 'use client'
 
-import { useState } from 'react'
-import { useRoomsStore } from '@/store/rooms.store'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
+
+interface ChatItem {
+  id: string
+  name: string
+  type: 'room' | 'dm'
+}
 
 interface Props {
   content: string
@@ -11,20 +16,52 @@ interface Props {
 }
 
 export default function ForwardModal({ content, onClose }: Props) {
-  const { rooms, dms } = useRoomsStore()
   const { user } = useAuthStore()
   const [search, setSearch] = useState('')
   const [forwarded, setForwarded] = useState<string[]>([])
+  const [allChats, setAllChats] = useState<ChatItem[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const getDmName = (room: typeof dms[0]) => {
-    const other = room.members?.find((m) => m.user.id !== user?.id)
-    return other?.user.username || room.name
-  }
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [roomsRes, dmsRes] = await Promise.all([
+          api.get('/rooms'),
+          api.get('/rooms/dm/list'),
+        ])
 
-  const allChats = [
-    ...rooms.map((r) => ({ id: r.id, name: r.name, type: 'room' as const })),
-    ...dms.map((d) => ({ id: d.id, name: getDmName(d), type: 'dm' as const })),
-  ].filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
+        const rooms: ChatItem[] = roomsRes.data.map((r: { id: string; name: string }) => ({
+          id: r.id,
+          name: r.name,
+          type: 'room' as const,
+        }))
+
+        const dms: ChatItem[] = dmsRes.data.map((d: {
+          id: string
+          name: string
+          members?: { user: { id: string; username: string } }[]
+        }) => {
+          const other = d.members?.find((m) => m.user.id !== user?.id)
+          return {
+            id: d.id,
+            name: other?.user.username || d.name,
+            type: 'dm' as const,
+          }
+        })
+
+        setAllChats([...dms, ...rooms])
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = allChats.filter((c) =>
+    c.name.toLowerCase().includes(search.toLowerCase())
+  )
 
   const forward = async (roomId: string) => {
     if (forwarded.includes(roomId)) return
@@ -73,10 +110,17 @@ export default function ForwardModal({ content, onClose }: Props) {
 
         {/* List */}
         <div className="max-h-64 overflow-y-auto px-2 pb-3">
-          {allChats.length === 0 && (
+          {loading && (
+            <div className="flex justify-center py-6">
+              <div className="w-5 h-5 rounded-full border-2 border-gray-700 border-t-violet-500 animate-spin" />
+            </div>
+          )}
+
+          {!loading && filtered.length === 0 && (
             <p className="text-center text-gray-600 text-xs py-4">No chats found</p>
           )}
-          {allChats.map((chat) => {
+
+          {!loading && filtered.map((chat) => {
             const done = forwarded.includes(chat.id)
             return (
               <button
@@ -85,7 +129,7 @@ export default function ForwardModal({ content, onClose }: Props) {
                 disabled={done}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${done ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/5'}`}
               >
-                <div className="w-9 h-9 rounded-full bg-violet-600 flex items-center justify-center text-white text-sm font-semibold shrink-0">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0 ${chat.type === 'dm' ? 'bg-emerald-600' : 'bg-violet-600'}`}>
                   {chat.type === 'dm' ? chat.name[0]?.toUpperCase() : '#'}
                 </div>
                 <div className="flex-1 text-left min-w-0">
