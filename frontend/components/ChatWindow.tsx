@@ -5,6 +5,7 @@ import { useRoomsStore, Message } from '@/store/rooms.store'
 import { useAuthStore } from '@/store/auth.store'
 import { connectSocket } from '@/lib/socket'
 import api from '@/lib/api'
+import { usePresenceStore } from '@/store/presence.store'
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 
@@ -39,6 +40,7 @@ function isSameDay(a: string, b: string) {
 export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const { activeRoom, messages, fetchMessages, addMessage, updateMessage, deleteMessage, setTyping, typingUsers, incrementUnread } = useRoomsStore()
   const { user } = useAuthStore()
+  const { onlineUsers } = usePresenceStore()
   const dmName = activeRoom?.isDm
     ? activeRoom.members?.find((m) => m.user.id !== user?.id)?.user.username || activeRoom.name
     : activeRoom?.name || ''
@@ -202,7 +204,12 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
           <div>
             <h2 className="text-white font-semibold text-sm leading-tight">{dmName}</h2>
             <p className="text-xs text-gray-500 leading-tight">
-              {memberCount !== null ? `${memberCount} members` : activeRoom.description || 'Group'}
+              {activeRoom.isDm
+                ? (onlineUsers.has(activeRoom.members?.find(m => m.user.id !== user?.id)?.user.id || '') ? '🟢 online' : 'offline')
+                : memberCount !== null
+                  ? `${memberCount} members`
+                  : activeRoom.description || 'Group'
+              }
             </p>
           </div>
         </div>
@@ -258,8 +265,13 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
                 {!isOwn && (
                   <div className="w-7 shrink-0">
                     {isLastInGroup && (
-                      <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-semibold">
-                        {msg.user.username[0].toUpperCase()}
+                      <div className="relative w-7 h-7">
+                        <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-semibold">
+                          {msg.user.username[0].toUpperCase()}
+                        </div>
+                        {onlineUsers.has(msg.user.id) && (
+                          <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border border-[#1a1a1a]" />
+                        )}
                       </div>
                     )}
                   </div>

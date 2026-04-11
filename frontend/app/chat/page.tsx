@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth.store'
 import { useRoomsStore } from '@/store/rooms.store'
+import { usePresenceStore } from '@/store/presence.store'
 import { connectSocket } from '@/lib/socket'
 import Sidebar from '@/components/Sidebar'
 import ChatWindow from '@/components/ChatWindow'
@@ -14,6 +15,7 @@ export default function ChatPage() {
   const { user, token, fetchMe } = useAuthStore()
   const { fetchRooms, setActiveRoom, activeRoom } = useRoomsStore()
   const fetchDms = useRoomsStore((s) => s.fetchDms)
+  const { setOnline, setOffline } = usePresenceStore()
   const [showSidebar, setShowSidebar] = useState(true)
 
   useEffect(() => {
@@ -24,7 +26,15 @@ export default function ChatPage() {
     fetchMe()
     fetchRooms()
     fetchDms()
-    connectSocket()
+    const socket = connectSocket()
+
+    socket.on('user:online', ({ userId }: { userId: string }) => setOnline(userId))
+    socket.on('user:offline', ({ userId }: { userId: string }) => setOffline(userId))
+
+    return () => {
+      socket.off('user:online')
+      socket.off('user:offline')
+    }
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRoomSelect = (room: Room) => {
