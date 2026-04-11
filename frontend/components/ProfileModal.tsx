@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import Image from 'next/image'
 import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
+import { uploadAvatar } from '@/lib/supabase'
 
 interface Props {
   onClose: () => void
@@ -12,27 +14,61 @@ export default function ProfileModal({ onClose }: Props) {
   const { user, fetchMe } = useAuthStore()
   const [username, setUsername] = useState(user?.username || '')
   const [bio, setBio] = useState(user?.bio || '')
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar || null)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Image must be under 2MB')
+      return
+    }
+    setAvatarFile(file)
+    setAvatarPreview(URL.createObjectURL(file))
+    setError('')
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccess(false)
     setLoading(true)
+
     try {
-      await api.patch('/auth/profile', { username: username.trim(), bio: bio.trim() })
+      let avatarUrl: string | undefined
+
+      if (avatarFile && user) {
+        setUploadProgress(true)
+        avatarUrl = await uploadAvatar(user.id, avatarFile)
+        setUploadProgress(false)
+      }
+
+      await api.patch('/auth/profile', {
+        username: username.trim(),
+        bio: bio.trim(),
+        ...(avatarUrl && { avatar: avatarUrl }),
+      })
+
       await fetchMe()
       setSuccess(true)
+      setAvatarFile(null)
       setTimeout(() => setSuccess(false), 2000)
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } }
       setError(e.response?.data?.message || 'Failed to update profile')
+      setUploadProgress(false)
     } finally {
       setLoading(false)
     }
   }
+
+  const initials = username[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase() || '?'
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
@@ -48,12 +84,43 @@ export default function ProfileModal({ onClose }: Props) {
         </div>
 
         <form onSubmit={handleSave} className="p-6 flex flex-col gap-5">
-          {/* Avatar preview */}
+          {/* Avatar upload */}
           <div className="flex flex-col items-center gap-3">
-            <div className="w-20 h-20 rounded-full bg-violet-600 flex items-center justify-center text-white text-3xl font-bold">
-              {username[0]?.toUpperCase() || user?.username?.[0]?.toUpperCase()}
+            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+              {avatarPreview ? (
+                <div className="w-20 h-20 rounded-full overflow-hidden ring-2 ring-violet-500/50">
+                  <Image
+                    src={avatarPreview}
+                    alt="Avatar preview"
+                    width={80}
+                    height={80}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-violet-600 flex items-center justify-center text-white text-3xl font-bold">
+                  {initials}
+                </div>
+              )}
+              {/* Overlay on hover */}
+              <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
             </div>
-            <p className="text-xs text-gray-500">Avatar is generated from your username initial</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+            <p className="text-xs text-gray-500">
+              {avatarFile ? `Selected: ${avatarFile.name}` : 'Click avatar to upload photo (max 2MB)'}
+            </p>
           </div>
 
           {/* Username */}
@@ -110,7 +177,7 @@ export default function ProfileModal({ onClose }: Props) {
               Cancel
             </button>
             <button type="submit" disabled={loading} className="flex-1 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white py-3 rounded-xl text-sm font-medium transition-colors">
-              {loading ? 'Saving...' : 'Save Changes'}
+              {uploadProgress ? 'Uploading...' : loading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>

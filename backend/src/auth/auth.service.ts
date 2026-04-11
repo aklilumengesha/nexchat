@@ -53,7 +53,7 @@ export class AuthService {
     return this.sanitize(user)
   }
 
-  async updateProfile(userId: string, dto: { username?: string; bio?: string }) {
+  async updateProfile(userId: string, dto: { username?: string; bio?: string; avatar?: string }) {
     if (dto.username) {
       const exists = await this.prisma.user.findFirst({
         where: { username: dto.username, id: { not: userId } },
@@ -65,6 +65,7 @@ export class AuthService {
       data: {
         ...(dto.username && { username: dto.username }),
         ...(dto.bio !== undefined && { bio: dto.bio }),
+        ...(dto.avatar !== undefined && { avatar: dto.avatar }),
       },
     })
     return this.sanitize(user)

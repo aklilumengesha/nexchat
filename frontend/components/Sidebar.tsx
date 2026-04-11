@@ -236,9 +236,13 @@ export default function Sidebar({ onRoomSelect }: Props) {
           onClick={() => setShowProfile(true)}
           className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
         >
-          <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-semibold shrink-0">
-            {user?.username?.[0]?.toUpperCase()}
-          </div>
+          {user?.avatar ? (
+            <img src={user.avatar} alt={user.username} className="w-8 h-8 rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+              {user?.username?.[0]?.toUpperCase()}
+            </div>
+          )}
           <div className="min-w-0 text-left">
             <p className="text-sm text-white font-medium truncate">{user?.username}</p>
             <p className="text-[11px] text-green-500">online</p>
