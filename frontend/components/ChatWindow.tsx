@@ -8,8 +8,40 @@ import api from '@/lib/api'
 import { usePresenceStore } from '@/store/presence.store'
 import SearchPanel from '@/components/SearchPanel'
 import RoomInfoPanel from '@/components/RoomInfoPanel'
+import { uploadChatFile } from '@/lib/supabase'
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+
+function renderMessageContent(content: string) {
+  if (content.startsWith('[img]') && content.endsWith('[/img]')) {
+    const url = content.slice(5, -6)
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        <img src={url} alt="shared image" className="max-w-[240px] max-h-[200px] rounded-xl object-cover cursor-pointer hover:opacity-90 transition-opacity" />
+      </a>
+    )
+  }
+  if (content.startsWith('[file]') && content.endsWith('[/file]')) {
+    const parts = content.slice(6, -7).split('|')
+    const [url, name, sizeStr] = parts
+    const size = parseInt(sizeStr || '0')
+    const sizeLabel = size > 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : `${(size / 1024).toFixed(0)} KB`
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/10 rounded-xl px-3 py-2.5 hover:bg-white/20 transition-colors min-w-[180px]">
+        <div className="w-8 h-8 rounded-lg bg-violet-500/30 flex items-center justify-center shrink-0">
+          <svg className="w-4 h-4 text-violet-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{name}</p>
+          <p className="text-[11px] opacity-60">{sizeLabel}</p>
+        </div>
+      </a>
+    )
+  }
+  return content
+}
 
 function RoomAvatar({ name }: { name: string }) {
   const colors = ['bg-blue-500','bg-violet-500','bg-emerald-500','bg-rose-500','bg-amber-500','bg-cyan-500','bg-pink-500']
@@ -61,8 +93,10 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const msgRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const skipRef = useRef(0)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -211,6 +245,28 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
     const container = scrollContainerRef.current
     if (container && container.scrollTop < 80 && hasMore && !loadingMore) {
       loadMore()
+    }
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !activeRoom || !user) return
+    if (file.size > 10 * 1024 * 1024) { alert('File must be under 10MB'); return }
+
+    setUploading(true)
+    try {
+      const { url, name, type, size } = await uploadChatFile(user.id, file)
+      const isImage = type.startsWith('image/')
+      const content = isImage
+        ? `[img]${url}[/img]`
+        : `[file]${url}|${name}|${size}[/file]`
+      const socket = connectSocket()
+      socket.emit('message:send', { roomId: activeRoom.id, content })
+    } catch (err) {
+      alert('Upload failed. Make sure the nexchat-files bucket exists in Supabase Storage.')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -433,7 +489,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
                         </div>
                       ) : (
                         <>
-                          {msg.content}
+                          {renderMessageContent(msg.content)}
                           <span className={`text-[10px] ml-2 float-right mt-1 ${isOwn ? 'text-violet-200' : 'text-gray-500'}`}>
                             {msg.updatedAt && msg.updatedAt !== msg.createdAt && <span className="mr-1 italic">edited</span>}
                             {formatTime(msg.createdAt)}
@@ -531,6 +587,27 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="text-gray-500 hover:text-gray-300 transition-colors shrink-0 disabled:opacity-40"
+            title="Attach file or image"
+          >
+            {uploading ? (
+              <div className="w-5 h-5 rounded-full border-2 border-gray-600 border-t-violet-500 animate-spin" />
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+            )}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.doc,.docx,.txt,.zip,.mp4,.mp3"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
           <div className="flex-1 bg-[#2d2d2d] rounded-full px-4 py-2.5">
             <input
               value={input}

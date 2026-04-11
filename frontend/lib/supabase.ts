@@ -16,6 +16,19 @@ export async function uploadAvatar(userId: string, file: File): Promise<string> 
   if (error) throw new Error(error.message)
 
   const { data } = supabase.storage.from('nexchat-avatars').getPublicUrl(path)
-  // Add cache-busting so the browser reloads the new image
   return `${data.publicUrl}?t=${Date.now()}`
+}
+
+export async function uploadChatFile(userId: string, file: File): Promise<{ url: string; name: string; type: string; size: number }> {
+  const ext = file.name.split('.').pop()
+  const path = `files/${userId}/${Date.now()}-${file.name}`
+
+  const { error } = await supabase.storage
+    .from('nexchat-files')
+    .upload(path, file, { contentType: file.type })
+
+  if (error) throw new Error(error.message)
+
+  const { data } = supabase.storage.from('nexchat-files').getPublicUrl(path)
+  return { url: data.publicUrl, name: file.name, type: file.type, size: file.size }
 }
