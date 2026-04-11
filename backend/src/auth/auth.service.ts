@@ -53,6 +53,23 @@ export class AuthService {
     return this.sanitize(user)
   }
 
+  async updateProfile(userId: string, dto: { username?: string; bio?: string }) {
+    if (dto.username) {
+      const exists = await this.prisma.user.findFirst({
+        where: { username: dto.username, id: { not: userId } },
+      })
+      if (exists) throw new ConflictException('Username already taken')
+    }
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.username && { username: dto.username }),
+        ...(dto.bio !== undefined && { bio: dto.bio }),
+      },
+    })
+    return this.sanitize(user)
+  }
+
   private signToken(userId: string, email: string) {
     return this.jwt.sign({ sub: userId, email })
   }

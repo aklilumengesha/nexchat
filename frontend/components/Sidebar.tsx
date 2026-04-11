@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRoomsStore, Room } from '@/store/rooms.store'
 import { useAuthStore } from '@/store/auth.store'
 import api from '@/lib/api'
+import ProfileModal from '@/components/ProfileModal'
 
 interface Props {
   onRoomSelect: (room: Room) => void
@@ -34,6 +35,7 @@ export default function Sidebar({ onRoomSelect }: Props) {
   const [users, setUsers] = useState<UserItem[]>([])
   const [userSearch, setUserSearch] = useState('')
   const [tab, setTab] = useState<'rooms' | 'dms'>('rooms')
+  const [showProfile, setShowProfile] = useState(false)
 
   useEffect(() => {
     fetchDms()
@@ -74,6 +76,7 @@ export default function Sidebar({ onRoomSelect }: Props) {
   }
 
   return (
+    <>
     <aside className="w-full md:w-80 bg-[#212121] flex flex-col h-full border-r border-white/5">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
@@ -229,15 +232,18 @@ export default function Sidebar({ onRoomSelect }: Props) {
 
       {/* Bottom user bar */}
       <div className="px-3 py-3 border-t border-white/5 flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
+        <button
+          onClick={() => setShowProfile(true)}
+          className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-white text-xs font-semibold shrink-0">
             {user?.username?.[0]?.toUpperCase()}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 text-left">
             <p className="text-sm text-white font-medium truncate">{user?.username}</p>
             <p className="text-[11px] text-green-500">online</p>
           </div>
-        </div>
+        </button>
         <button onClick={logout} className="text-xs text-gray-600 hover:text-red-400 transition-colors shrink-0 ml-2" title="Sign out">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -245,5 +251,8 @@ export default function Sidebar({ onRoomSelect }: Props) {
         </button>
       </div>
     </aside>
+
+    {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+  </>
   )
 }
