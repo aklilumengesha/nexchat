@@ -37,7 +37,7 @@ function isSameDay(a: string, b: string) {
 }
 
 export default function ChatWindow() {
-  const { activeRoom, messages, fetchMessages, addMessage, setTyping, typingUsers } = useRoomsStore()
+  const { activeRoom, messages, fetchMessages, addMessage, updateMessage, deleteMessage, setTyping, typingUsers } = useRoomsStore()
   const { user } = useAuthStore()
   const [input, setInput] = useState('')
   const [memberCount, setMemberCount] = useState<number | null>(null)
@@ -46,6 +46,9 @@ export default function ChatWindow() {
   const [reactionPicker, setReactionPicker] = useState<string | null>(null)
   const [msgReactions, setMsgReactions] = useState<Record<string, { emoji: string; count: number }[]>>({})
   const [replyTo, setReplyTo] = useState<Message | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ msgId: string; x: number; y: number } | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -62,6 +65,12 @@ export default function ChatWindow() {
     socket.on('message:new', (msg: Message) => {
       if (msg.roomId === activeRoom.id) addMessage(msg)
     })
+    socket.on('message:edited', (msg: Message) => {
+      updateMessage(msg)
+    })
+    socket.on('message:deleted', ({ messageId }: { messageId: string }) => {
+      deleteMessage(messageId)
+    })
     socket.on('reaction:updated', ({ messageId, reactions }: { messageId: string; reactions: { emoji: string; count: number }[] }) => {
       setMsgReactions((prev) => ({ ...prev, [messageId]: reactions }))
     })
@@ -75,6 +84,8 @@ export default function ChatWindow() {
     return () => {
       socket.emit('room:leave', { roomId: activeRoom.id })
       socket.off('message:new')
+      socket.off('message:edited')
+      socket.off('message:deleted')
       socket.off('reaction:updated')
       socket.off('typing:start')
       socket.off('typing:stop')
@@ -89,6 +100,7 @@ export default function ChatWindow() {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false)
       setReactionPicker(null)
+      setContextMenu(null)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -120,8 +132,34 @@ export default function ChatWindow() {
     typingTimeout.current = setTimeout(() => socket.emit('typing:stop', { roomId: activeRoom.id }), 2000)
   }
 
-  const toggleReaction = (messageId: string, emoji: string) => {
+  const handleContextMenu = (e: React.MouseEvent, msg: Message) => {
+    if (msg.user.id !== user?.id) return
+    e.preventDefault()
+    setContextMenu({ msgId: msg.id, x: e.clientX, y: e.clientY })
+  }
+
+  const startEdit = (msg: Message) => {
+    setEditingId(msg.id)
+    setEditContent(msg.content)
+    setContextMenu(null)
+  }
+
+  const submitEdit = (messageId: string) => {
+    if (!editContent.trim() || !activeRoom) return
+    const socket = connectSocket()
+    socket.emit('message:edit', { messageId, content: editContent.trim(), roomId: activeRoom.id })
+    setEditingId(null)
+    setEditContent('')
+  }
+
+  const handleDelete = (messageId: string) => {
     if (!activeRoom) return
+    const socket = connectSocket()
+    socket.emit('message:delete', { messageId, roomId: activeRoom.id })
+    setContextMenu(null)
+  }
+
+  const toggleReaction = (messageId: string, emoji: string) => {    if (!activeRoom) return
     const socket = connectSocket()
     const existing = msgReactions[messageId]?.find((r) => r.emoji === emoji)
     socket.emit(existing ? 'reaction:remove' : 'reaction:add', { messageId, emoji, roomId: activeRoom.id })
@@ -204,6 +242,7 @@ export default function ChatWindow() {
                 className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${isFirstInGroup ? 'mt-3' : 'mt-0.5'} relative`}
                 onMouseEnter={() => setHoveredMsg(msg.id)}
                 onMouseLeave={() => setHoveredMsg(null)}
+                onContextMenu={(e) => handleContextMenu(e, msg)}
               >
                 {!isOwn && (
                   <div className="w-7 shrink-0">
@@ -273,11 +312,33 @@ export default function ChatWindow() {
                           </p>
                         </div>
                       )}
-                      {msg.content}
-                      <span className={`text-[10px] ml-2 float-right mt-1 ${isOwn ? 'text-violet-200' : 'text-gray-500'}`}>
-                        {formatTime(msg.createdAt)}
-                        {isOwn && <span className="ml-1">✓✓</span>}
-                      </span>
+                      {editingId === msg.id ? (
+                        <div className="flex flex-col gap-1">
+                          <input
+                            autoFocus
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') submitEdit(msg.id)
+                              if (e.key === 'Escape') { setEditingId(null) }
+                            }}
+                            className="bg-white/10 rounded px-2 py-1 text-white text-sm focus:outline-none w-full"
+                          />
+                          <div className="flex gap-2 text-[11px]">
+                            <button onClick={() => submitEdit(msg.id)} className="text-green-300 hover:text-green-200">Save</button>
+                            <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-300">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {msg.content}
+                          <span className={`text-[10px] ml-2 float-right mt-1 ${isOwn ? 'text-violet-200' : 'text-gray-500'}`}>
+                            {msg.updatedAt && msg.updatedAt !== msg.createdAt && <span className="mr-1 italic">edited</span>}
+                            {formatTime(msg.createdAt)}
+                            {isOwn && <span className="ml-1">✓✓</span>}
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     {/* Reactions */}
@@ -316,6 +377,34 @@ export default function ChatWindow() {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-[#2d2d2d] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 w-40"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            onClick={() => { const msg = messages.find(m => m.id === contextMenu.msgId); if (msg) startEdit(msg) }}
+            className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit
+          </button>
+          <div className="border-t border-white/10" />
+          <button
+            onClick={() => handleDelete(contextMenu.msgId)}
+            className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-white/10 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      )}
 
       {/* Input */}
       <div className="px-4 py-3 bg-[#212121] border-t border-white/5">

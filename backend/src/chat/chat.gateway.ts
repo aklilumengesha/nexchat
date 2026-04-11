@@ -212,6 +212,36 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch { /* not found — ignore */ }
   }
 
+  @SubscribeMessage('message:edit')
+  async handleEdit(
+    @MessageBody() data: { messageId: string; content: string; roomId: string },
+    @ConnectedSocket() client: AuthSocket,
+  ) {
+    if (!client.userId || !data.content?.trim()) return
+    const msg = await this.prisma.message.findUnique({ where: { id: data.messageId } })
+    if (!msg || msg.userId !== client.userId) return
+
+    const updated = await this.prisma.message.update({
+      where: { id: data.messageId },
+      data: { content: data.content.trim() },
+      include: { user: { select: { id: true, username: true, avatar: true } } },
+    })
+    this.server.to(data.roomId).emit('message:edited', updated)
+  }
+
+  @SubscribeMessage('message:delete')
+  async handleDelete(
+    @MessageBody() data: { messageId: string; roomId: string },
+    @ConnectedSocket() client: AuthSocket,
+  ) {
+    if (!client.userId) return
+    const msg = await this.prisma.message.findUnique({ where: { id: data.messageId } })
+    if (!msg || msg.userId !== client.userId) return
+
+    await this.prisma.message.delete({ where: { id: data.messageId } })
+    this.server.to(data.roomId).emit('message:deleted', { messageId: data.messageId, roomId: data.roomId })
+  }
+
   getOnlineUsers() {
     return Array.from(this.onlineUsers.keys())
   }

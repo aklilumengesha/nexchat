@@ -17,6 +17,7 @@ export interface Message {
   userId: string
   content: string
   createdAt: string
+  updatedAt?: string
   replyToId?: string
   replyTo?: { id: string; content: string; user: { id: string; username: string } } | null
   user: { id: string; username: string; avatar?: string }
@@ -33,6 +34,8 @@ interface RoomsState {
   setActiveRoom: (room: Room) => void
   fetchMessages: (roomId: string) => Promise<void>
   addMessage: (msg: Message) => void
+  updateMessage: (msg: Message) => void
+  deleteMessage: (messageId: string) => void
   createRoom: (name: string, description?: string) => Promise<Room>
   joinRoom: (roomId: string) => Promise<void>
   setTyping: (roomId: string, username: string, isTyping: boolean) => void
@@ -59,7 +62,17 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
   },
 
   addMessage: (msg) =>
-    set((state) => ({ messages: [...state.messages, msg] })),  createRoom: async (name, description) => {
+    set((state) => ({ messages: [...state.messages, msg] })),
+
+  updateMessage: (updated: Message) =>
+    set((state) => ({
+      messages: state.messages.map((m) => m.id === updated.id ? { ...m, ...updated } : m),
+    })),
+
+  deleteMessage: (messageId: string) =>
+    set((state) => ({
+      messages: state.messages.filter((m) => m.id !== messageId),
+    })),  createRoom: async (name, description) => {
     const { data } = await api.post('/rooms', { name, description })
     set((state) => ({ rooms: [data, ...state.rooms] }))
     return data
