@@ -46,6 +46,7 @@ interface RoomsState {
   dms: Room[]
   fetchDms: () => Promise<void>
   startDm: (targetUserId: string) => Promise<Room>
+  loadMoreMessages: (msgs: Message[]) => void
   incrementUnread: (roomId: string) => void
   clearUnread: (roomId: string) => void
 }
@@ -113,6 +114,9 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
         [roomId]: (state.unreadCounts[roomId] || 0) + 1,
       },
     })),
+
+  loadMoreMessages: (msgs) =>
+    set((state) => ({ messages: [...msgs, ...state.messages] })),
 
   clearUnread: (roomId) =>
     set((state) => ({

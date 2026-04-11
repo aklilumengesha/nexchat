@@ -40,7 +40,7 @@ function isSameDay(a: string, b: string) {
 }
 
 export default function ChatWindow({ onBack }: { onBack?: () => void }) {
-  const { activeRoom, messages, fetchMessages, addMessage, updateMessage, deleteMessage, setTyping, typingUsers, incrementUnread } = useRoomsStore()
+  const { activeRoom, messages, fetchMessages, addMessage, updateMessage, deleteMessage, setTyping, typingUsers, incrementUnread, loadMoreMessages } = useRoomsStore()
   const { user } = useAuthStore()
   const { onlineUsers } = usePresenceStore()
   const dmName = activeRoom?.isDm
@@ -60,6 +60,10 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const msgRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const skipRef = useRef(0)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -67,6 +71,8 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
     if (!activeRoom) return
     const socket = connectSocket()
     fetchMessages(activeRoom.id)
+    skipRef.current = 50
+    setHasMore(true)
     socket.emit('room:join', { roomId: activeRoom.id })
     api.get(`/rooms/${activeRoom.id}`).then((res) => {
       setMemberCount(res.data.members?.length ?? null)
@@ -177,8 +183,38 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
     setContextMenu(null)
   }
 
-  const jumpToMessage = (messageId: string) => {
-    const el = msgRefs.current[messageId]
+  const loadMore = async () => {
+    if (!activeRoom || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    const container = scrollContainerRef.current
+    const prevScrollHeight = container?.scrollHeight || 0
+    try {
+      const { data } = await api.get(`/rooms/${activeRoom.id}/messages?take=50&skip=${skipRef.current}`)
+      if (data.length === 0) {
+        setHasMore(false)
+      } else {
+        loadMoreMessages([...data].reverse())
+        skipRef.current += data.length
+        // Restore scroll position after prepend
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight - prevScrollHeight
+          }
+        })
+      }
+    } catch { /* ignore */ } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const handleScroll = () => {
+    const container = scrollContainerRef.current
+    if (container && container.scrollTop < 80 && hasMore && !loadingMore) {
+      loadMore()
+    }
+  }
+
+  const jumpToMessage = (messageId: string) => {    const el = msgRefs.current[messageId]
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       el.classList.add('bg-violet-500/10')
@@ -264,7 +300,20 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-1"
+      >
+        {/* Load more indicator */}
+        {loadingMore && (
+          <div className="flex justify-center py-3">
+            <div className="w-4 h-4 rounded-full border-2 border-gray-700 border-t-violet-500 animate-spin" />
+          </div>
+        )}
+        {!hasMore && messages.length > 0 && (
+          <p className="text-center text-[11px] text-gray-600 py-2">Beginning of conversation</p>
+        )}
         {messages.map((msg, i) => {
           const isOwn = msg.user.id === user?.id
           const prevMsg = messages[i - 1]
