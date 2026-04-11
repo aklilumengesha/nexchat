@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRoomsStore } from '@/store/rooms.store'
 import { useAuthStore } from '@/store/auth.store'
-import { connectSocket } from '@/lib/socket'
+import api from '@/lib/api'
 
 interface Props {
   content: string
@@ -26,11 +26,14 @@ export default function ForwardModal({ content, onClose }: Props) {
     ...dms.map((d) => ({ id: d.id, name: getDmName(d), type: 'dm' as const })),
   ].filter((c) => c.name.toLowerCase().includes(search.toLowerCase()))
 
-  const forward = (roomId: string) => {
+  const forward = async (roomId: string) => {
     if (forwarded.includes(roomId)) return
-    const socket = connectSocket()
-    socket.emit('message:send', { roomId, content: `↪ Forwarded: ${content}` })
-    setForwarded((prev) => [...prev, roomId])
+    try {
+      await api.post(`/rooms/${roomId}/messages`, { content: `↪ Forwarded: ${content}` })
+      setForwarded((prev) => [...prev, roomId])
+    } catch {
+      alert('Could not forward — you may not be a member of that room.')
+    }
   }
 
   return (

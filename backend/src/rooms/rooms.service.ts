@@ -121,6 +121,18 @@ export class RoomsService {
     })
   }
 
+  async sendMessage(roomId: string, userId: string, content: string) {
+    const member = await this.prisma.roomMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+    })
+    if (!member) throw new ForbiddenException('Not a member of this room')
+
+    return this.prisma.message.create({
+      data: { roomId, userId, content },
+      include: { user: { select: { id: true, username: true, avatar: true } } },
+    })
+  }
+
   async searchMessages(roomId: string, query: string, userId: string) {
     // Verify membership
     const member = await this.prisma.roomMember.findUnique({

@@ -52,6 +52,15 @@ export class RoomsController {
     return this.roomsService.getMessages(id, take ? +take : 50, skip ? +skip : 0)
   }
 
+  @Post(':id/messages')
+  sendMessage(
+    @Param('id') id: string,
+    @Body() body: { content: string },
+    @Request() req: any,
+  ) {
+    return this.roomsService.sendMessage(id, req.user.id, body.content)
+  }
+
   @Get(':id/search')
   searchMessages(
     @Param('id') id: string,
