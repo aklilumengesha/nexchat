@@ -18,19 +18,38 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'
 export class RoomsController {
   constructor(private roomsService: RoomsService) {}
 
+  // ── Static routes FIRST (before :id) ──────────────────────────────
+
   @Get()
   findAll() {
     return this.roomsService.findAll()
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.roomsService.findOne(id)
-  }
-
   @Post()
   create(@Body() dto: CreateRoomDto, @Request() req: any) {
     return this.roomsService.create(dto, req.user.id)
+  }
+
+  @Get('dm/list')
+  getMyDms(@Request() req: any) {
+    return this.roomsService.getMyDms(req.user.id)
+  }
+
+  @Post('dm/:targetUserId')
+  findOrCreateDm(@Param('targetUserId') targetUserId: string, @Request() req: any) {
+    return this.roomsService.findOrCreateDm(req.user.id, targetUserId)
+  }
+
+  @Get('users/all')
+  getAllUsers(@Request() req: any) {
+    return this.roomsService.getAllUsers(req.user.id)
+  }
+
+  // ── Parameterized routes AFTER ─────────────────────────────────────
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.roomsService.findOne(id)
   }
 
   @Post(':id/join')
@@ -68,20 +87,5 @@ export class RoomsController {
     @Request() req: any,
   ) {
     return this.roomsService.searchMessages(id, q || '', req.user.id)
-  }
-
-  @Get('dm/list')
-  getMyDms(@Request() req: any) {
-    return this.roomsService.getMyDms(req.user.id)
-  }
-
-  @Post('dm/:targetUserId')
-  findOrCreateDm(@Param('targetUserId') targetUserId: string, @Request() req: any) {
-    return this.roomsService.findOrCreateDm(req.user.id, targetUserId)
-  }
-
-  @Get('users/all')
-  getAllUsers(@Request() req: any) {
-    return this.roomsService.getAllUsers(req.user.id)
   }
 }
