@@ -8,7 +8,7 @@ export class RoomsService {
 
   async findAll() {
     return this.prisma.room.findMany({
-      where: { isPrivate: false },
+      where: { isPrivate: false, isDm: false },
       include: {
         _count: { select: { members: true, messages: true } },
       },
@@ -67,8 +67,61 @@ export class RoomsService {
     })
   }
 
-  async getMessages(roomId: string, take = 50, skip = 0) {
-    const room = await this.prisma.room.findUnique({ where: { id: roomId } })
+  async findOrCreateDm(userId: string, targetUserId: string) {
+    // Find existing DM between these two users
+    const existing = await this.prisma.room.findFirst({
+      where: {
+        isDm: true,
+        members: { every: { userId: { in: [userId, targetUserId] } } },
+        AND: [
+          { members: { some: { userId } } },
+          { members: { some: { userId: targetUserId } } },
+        ],
+      },
+      include: { members: { include: { user: { select: { id: true, username: true, avatar: true } } } } },
+    })
+    if (existing) return existing
+
+    const targetUser = await this.prisma.user.findUnique({ where: { id: targetUserId } })
+    if (!targetUser) throw new NotFoundException('User not found')
+
+    return this.prisma.room.create({
+      data: {
+        name: `dm_${userId}_${targetUserId}`,
+        isDm: true,
+        isPrivate: true,
+        createdBy: userId,
+        members: {
+          create: [{ userId }, { userId: targetUserId }],
+        },
+      },
+      include: { members: { include: { user: { select: { id: true, username: true, avatar: true } } } } },
+    })
+  }
+
+  async getMyDms(userId: string) {
+    return this.prisma.room.findMany({
+      where: {
+        isDm: true,
+        members: { some: { userId } },
+      },
+      include: {
+        members: { include: { user: { select: { id: true, username: true, avatar: true } } } },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+  }
+
+  async getAllUsers(excludeUserId: string) {
+    return this.prisma.user.findMany({
+      where: { id: { not: excludeUserId } },
+      select: { id: true, username: true, avatar: true },
+      orderBy: { username: 'asc' },
+    })
+  }
+
+  async getMessages(roomId: string, take = 50, skip = 0) {    const room = await this.prisma.room.findUnique({ where: { id: roomId } })
     if (!room) throw new NotFoundException('Room not found')
 
     return this.prisma.message.findMany({

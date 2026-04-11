@@ -13,6 +13,7 @@ export default function ChatPage() {
   const router = useRouter()
   const { user, token, fetchMe } = useAuthStore()
   const { fetchRooms, setActiveRoom, activeRoom } = useRoomsStore()
+  const fetchDms = useRoomsStore((s) => s.fetchDms)
   const [showSidebar, setShowSidebar] = useState(true)
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function ChatPage() {
     }
     fetchMe()
     fetchRooms()
+    fetchDms()
     connectSocket()
   }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
 

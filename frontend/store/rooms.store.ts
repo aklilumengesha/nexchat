@@ -6,9 +6,12 @@ export interface Room {
   name: string
   description?: string
   isPrivate: boolean
+  isDm?: boolean
   createdBy: string
   createdAt: string
   _count?: { members: number; messages: number }
+  members?: { user: { id: string; username: string; avatar?: string } }[]
+  messages?: { content: string }[]
 }
 
 export interface Message {
@@ -40,12 +43,16 @@ interface RoomsState {
   createRoom: (name: string, description?: string) => Promise<Room>
   joinRoom: (roomId: string) => Promise<void>
   setTyping: (roomId: string, username: string, isTyping: boolean) => void
+  dms: Room[]
+  fetchDms: () => Promise<void>
+  startDm: (targetUserId: string) => Promise<Room>
   incrementUnread: (roomId: string) => void
   clearUnread: (roomId: string) => void
 }
 
 export const useRoomsStore = create<RoomsState>((set, get) => ({
   rooms: [],
+  dms: [],
   activeRoom: null,
   messages: [],
   typingUsers: {},
@@ -111,4 +118,18 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
     set((state) => ({
       unreadCounts: { ...state.unreadCounts, [roomId]: 0 },
     })),
+
+  fetchDms: async () => {
+    const { data } = await api.get('/rooms/dm/list')
+    set({ dms: data })
+  },
+
+  startDm: async (targetUserId) => {
+    const { data } = await api.post(`/rooms/dm/${targetUserId}`)
+    set((state) => {
+      const exists = state.dms.find((d) => d.id === data.id)
+      return { dms: exists ? state.dms : [data, ...state.dms] }
+    })
+    return data
+  },
 }))

@@ -39,6 +39,9 @@ function isSameDay(a: string, b: string) {
 export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const { activeRoom, messages, fetchMessages, addMessage, updateMessage, deleteMessage, setTyping, typingUsers, incrementUnread } = useRoomsStore()
   const { user } = useAuthStore()
+  const dmName = activeRoom?.isDm
+    ? activeRoom.members?.find((m) => m.user.id !== user?.id)?.user.username || activeRoom.name
+    : activeRoom?.name || ''
   const [input, setInput] = useState('')
   const [memberCount, setMemberCount] = useState<number | null>(null)
   const [showMenu, setShowMenu] = useState(false)
@@ -195,9 +198,9 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
               </svg>
             </button>
           )}
-          <RoomAvatar name={activeRoom.name} />
+          <RoomAvatar name={dmName} />
           <div>
-            <h2 className="text-white font-semibold text-sm leading-tight">{activeRoom.name}</h2>
+            <h2 className="text-white font-semibold text-sm leading-tight">{dmName}</h2>
             <p className="text-xs text-gray-500 leading-tight">
               {memberCount !== null ? `${memberCount} members` : activeRoom.description || 'Group'}
             </p>

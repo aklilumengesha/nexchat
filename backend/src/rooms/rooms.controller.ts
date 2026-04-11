@@ -51,4 +51,19 @@ export class RoomsController {
   ) {
     return this.roomsService.getMessages(id, take ? +take : 50, skip ? +skip : 0)
   }
+
+  @Get('dm/list')
+  getMyDms(@Request() req: any) {
+    return this.roomsService.getMyDms(req.user.id)
+  }
+
+  @Post('dm/:targetUserId')
+  findOrCreateDm(@Param('targetUserId') targetUserId: string, @Request() req: any) {
+    return this.roomsService.findOrCreateDm(req.user.id, targetUserId)
+  }
+
+  @Get('users/all')
+  getAllUsers(@Request() req: any) {
+    return this.roomsService.getAllUsers(req.user.id)
+  }
 }
