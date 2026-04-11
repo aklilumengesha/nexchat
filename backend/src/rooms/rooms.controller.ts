@@ -52,6 +52,15 @@ export class RoomsController {
     return this.roomsService.getMessages(id, take ? +take : 50, skip ? +skip : 0)
   }
 
+  @Get(':id/search')
+  searchMessages(
+    @Param('id') id: string,
+    @Query('q') q: string,
+    @Request() req: any,
+  ) {
+    return this.roomsService.searchMessages(id, q || '', req.user.id)
+  }
+
   @Get('dm/list')
   getMyDms(@Request() req: any) {
     return this.roomsService.getMyDms(req.user.id)

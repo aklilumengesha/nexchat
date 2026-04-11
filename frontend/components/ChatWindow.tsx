@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { connectSocket } from '@/lib/socket'
 import api from '@/lib/api'
 import { usePresenceStore } from '@/store/presence.store'
+import SearchPanel from '@/components/SearchPanel'
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 
@@ -47,6 +48,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const [input, setInput] = useState('')
   const [memberCount, setMemberCount] = useState<number | null>(null)
   const [showMenu, setShowMenu] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
   const [hoveredMsg, setHoveredMsg] = useState<string | null>(null)
   const [reactionPicker, setReactionPicker] = useState<string | null>(null)
   const [msgReactions, setMsgReactions] = useState<Record<string, { emoji: string; count: number }[]>>({})
@@ -55,6 +57,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const msgRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -166,11 +169,19 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
     setEditContent('')
   }
 
-  const handleDelete = (messageId: string) => {
-    if (!activeRoom) return
+  const handleDelete = (messageId: string) => {    if (!activeRoom) return
     const socket = connectSocket()
     socket.emit('message:delete', { messageId, roomId: activeRoom.id })
     setContextMenu(null)
+  }
+
+  const jumpToMessage = (messageId: string) => {
+    const el = msgRefs.current[messageId]
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('bg-violet-500/10')
+      setTimeout(() => el.classList.remove('bg-violet-500/10'), 2000)
+    }
   }
 
   const toggleReaction = (messageId: string, emoji: string) => {    if (!activeRoom) return
@@ -185,7 +196,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   if (!activeRoom) return null
 
   return (
-    <div className="flex-1 flex flex-col bg-[#1a1a1a] h-full">
+    <div className="flex-1 flex flex-col bg-[#1a1a1a] h-full relative">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-[#212121] border-b border-white/5">
         <div className="flex items-center gap-3">
@@ -214,7 +225,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
           </div>
         </div>
         <div className="flex items-center gap-1 relative" ref={menuRef}>
-          <button className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+          <button onClick={() => setShowSearch(!showSearch)} className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -257,7 +268,9 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
               )}
 
               <div
-                className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${isFirstInGroup ? 'mt-3' : 'mt-0.5'} relative`}
+                key={msg.id}
+                ref={(el) => { msgRefs.current[msg.id] = el }}
+                className={`flex items-end gap-2 ${isOwn ? 'flex-row-reverse' : 'flex-row'} ${isFirstInGroup ? 'mt-3' : 'mt-0.5'} relative transition-colors duration-500 rounded-xl`}
                 onMouseEnter={() => setHoveredMsg(msg.id)}
                 onMouseLeave={() => setHoveredMsg(null)}
                 onContextMenu={(e) => handleContextMenu(e, msg)}
@@ -479,6 +492,15 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
           </button>
         </div>
       </div>
+
+      {/* Search panel */}
+      {showSearch && activeRoom && (
+        <SearchPanel
+          roomId={activeRoom.id}
+          onClose={() => setShowSearch(false)}
+          onJumpTo={jumpToMessage}
+        />
+      )}
     </div>
   )
 }

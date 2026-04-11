@@ -121,6 +121,26 @@ export class RoomsService {
     })
   }
 
+  async searchMessages(roomId: string, query: string, userId: string) {
+    // Verify membership
+    const member = await this.prisma.roomMember.findUnique({
+      where: { roomId_userId: { roomId, userId } },
+    })
+    if (!member) throw new ForbiddenException('Not a member of this room')
+
+    return this.prisma.message.findMany({
+      where: {
+        roomId,
+        content: { contains: query, mode: 'insensitive' },
+      },
+      include: {
+        user: { select: { id: true, username: true, avatar: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    })
+  }
+
   async getMessages(roomId: string, take = 50, skip = 0) {    const room = await this.prisma.room.findUnique({ where: { id: roomId } })
     if (!room) throw new NotFoundException('Room not found')
 
