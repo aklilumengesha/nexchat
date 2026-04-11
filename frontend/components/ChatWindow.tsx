@@ -9,6 +9,7 @@ import { usePresenceStore } from '@/store/presence.store'
 import SearchPanel from '@/components/SearchPanel'
 import RoomInfoPanel from '@/components/RoomInfoPanel'
 import { uploadChatFile } from '@/lib/supabase'
+import ForwardModal from '@/components/ForwardModal'
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥']
 
@@ -90,6 +91,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
   const [contextMenu, setContextMenu] = useState<{ msgId: string; x: number; y: number } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
+  const [forwardContent, setForwardContent] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const msgRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -551,6 +553,15 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
             </svg>
             Edit
           </button>
+          <button
+            onClick={() => { const msg = messages.find(m => m.id === contextMenu.msgId); if (msg) { setForwardContent(msg.content); setContextMenu(null) } }}
+            className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-white/10 transition-colors flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+            Forward
+          </button>
           <div className="border-t border-white/10" />
           <button
             onClick={() => handleDelete(contextMenu.msgId)}
@@ -656,6 +667,14 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
           onLeave={() => {
             useRoomsStore.getState().fetchRooms()
           }}
+        />
+      )}
+
+      {/* Forward modal */}
+      {forwardContent !== null && (
+        <ForwardModal
+          content={forwardContent}
+          onClose={() => setForwardContent(null)}
         />
       )}
     </div>
