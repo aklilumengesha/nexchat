@@ -545,6 +545,7 @@ export default function ChatWindow({ onBack }: { onBack?: () => void }) {
           <div
             className="fixed bg-[#2d2d2d] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 w-40"
             style={{ top: contextMenu.y, left: contextMenu.x }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
             {isOwnMsg && (
               <button
